@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /bin/python3
 
 import logging
 import sys
@@ -67,14 +67,14 @@ class NguIndustriesLayouts:
     # self.current_filename = '{0}_best.{1}'.format(*self.base_filename.split('.', 1))
     # self._create_layout()
     # self.logger.info('Best possible layout ignoring speed caps and rounding errors:')
-    # self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value}')
+    # self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
     # self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
     # layout without speed
     self.options = [self.empty, self.pb, self.pk]
     self.current_filename = '{0}_speedless.{1}'.format(*self.base_filename.split('.', 1))
     self._create_layout()
     self.logger.info('Best layout for buildings that have reached the speed cap (still ignoring rounding errors):')
-    self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value}')
+    self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
     self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
 
   def _create_layout(self):
@@ -82,12 +82,12 @@ class NguIndustriesLayouts:
     self.permutations = 0
     self.best_layout = []
     self.best_value = 0
-    self._recurse_layout(deepcopy(self.base_layout), 2, 2)
+    self._recurse_layout(deepcopy(self.base_layout), 2, 2, self.base_value)
     self.logger.debug(f'Tried {self.permutations} permutations for {self.current_filename}')
     if not self.write_each_new_best:
       self._write_to_file(self.best_layout, self.current_filename)
 
-  def _recurse_layout(self, layout, x, y):
+  def _recurse_layout(self, layout, x, y, value):
     # without logic to eliminate permutations early, this will check about 10^158
     while layout[y][x] != self.empty and (x < self.x_max - 2 or y < self.y_max - 2):
       # self.logger.debug(f'Checking x: {x}, y: {y}')
@@ -98,38 +98,41 @@ class NguIndustriesLayouts:
         x += 1
     # self.logger.debug(f'Checking x: {x}, y: {y}')
     if layout[y][x] == self.empty:
-      must_be_empty = self._is_counterproductive(layout, x, y)
+      empty_value = value
+      box_count = self._box_touching_count(layout, x, y)
+      knight_count = self._knight_touching_count(layout, x, y)
+      no_bb = box_count < self.bb_threshold
+      no_pb = box_count < self.pb_threshold
+      no_bk = knight_count < self.bk_threshold
+      no_pk = knight_count < self.pk_threshold
+      # self.logger.debug(f'no_bb: {no_bb}, no_pb: {no_pb}, no_bk: {no_bk}, no_pk: {no_pk}')
       # try all 4 beacons and no beacon
       for option in self.options:
         layout[y][x] = option
-        if option == self.empty:
-          # take advantage of empty spaces always being checked first
-          empty_value = self._layout_value(layout)
-          current_value = empty_value
-        else:
-          # check if any beacons affecting this space would lose their usefulness
-          if must_be_empty:
+        if option != self.empty:
+          # limit permutations by checking if any beacon would be useless or counterproductive
+          # by also checking if any beacons affecting this space would lose their usefulness
+          if (no_bb and no_pb and no_bk and no_pk) or self._is_counterproductive(layout, x, y):
             break
-          # narrow down the tests a bit by checking if this beacon would be useless
-          if (option == self.bb and self._box_touching_count(layout, x, y) < self.bb_threshold) or \
-             (option == self.pb and self._box_touching_count(layout, x, y) < self.pb_threshold) or \
-             (option == self.bk and self._knight_touching_count(layout, x, y) < self.bk_threshold) or \
-             (option == self.pk and self._knight_touching_count(layout, x, y) < self.pk_threshold):
+          # limit permutations by checking if this specific type of beacon would be useless
+          elif (option == self.bb and no_bb) or \
+               (option == self.pb and no_pb) or \
+               (option == self.bk and no_bk) or \
+               (option == self.pk and no_pk):
             continue
-          current_value = self._layout_value(layout)
-        # narrow down a bit more
-        if current_value >= empty_value:
+          value = self._layout_value(layout)
+        # limit permutations by abandoning paths that start by lowering productivity
+        if value >= empty_value:
           # self.logger.debug(f'Trying x: {x}, y: {y}, beacon: {option}')
-          self._recurse_layout(deepcopy(layout), x + 1, y)
+          self._recurse_layout(deepcopy(layout), x + 1, y, value)
     else:
-      # last recursion
-      # self.logger.debug(f'Checking layout number {self.permutations}')
+      # last in the chain of recursions
       self.permutations += 1
-      value = self._layout_value(layout)
+      # self.logger.debug(f'Checking permutation {self.permutations} with value {value}')
       if value > self.best_value:
         self.best_layout = deepcopy(layout)
         self.best_value = value
-        self.logger.debug(f'New value at permutation {self.permutations}: {value}')
+        self.logger.debug(f'New best value at permutation {self.permutations}: {value}')
         if self.write_each_new_best:
           self._write_to_file(self.best_layout, self.current_filename)
 
@@ -139,10 +142,10 @@ class NguIndustriesLayouts:
         if j == k == 0: continue
         elif abs(j) == abs(k) == 2: continue
         elif abs(j) == 2 or abs(k) == 2:
-          if layout[y+k][x+j] == cls.bk and cls._knight_touching_count(layout, x + j, y + k) < cls.bk_threshold + 1: return True
-          elif layout[y+k][x+j] == cls.pk and cls._knight_touching_count(layout, x + j, y + k) < cls.pk_threshold + 1: return True
-        elif layout[y+k][x+j] == cls.bb and cls._box_touching_count(layout, x + j, y + k) < cls.bb_threshold + 1: return True
-        elif layout[y+k][x+j] == cls.pb and cls._box_touching_count(layout, x + j, y + k) < cls.pb_threshold + 1: return True
+          if layout[y+k][x+j] == cls.bk and cls._knight_touching_count(layout, x + j, y + k) < cls.bk_threshold: return True
+          elif layout[y+k][x+j] == cls.pk and cls._knight_touching_count(layout, x + j, y + k) < cls.pk_threshold: return True
+        elif layout[y+k][x+j] == cls.bb and cls._box_touching_count(layout, x + j, y + k) < cls.bb_threshold: return True
+        elif layout[y+k][x+j] == cls.pb and cls._box_touching_count(layout, x + j, y + k) < cls.pb_threshold: return True
 
   def _box_touching_count(cls, layout, x, y):
     return (1 if layout[y-1][x] == cls.empty else 0) + \
