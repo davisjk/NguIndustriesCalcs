@@ -98,7 +98,7 @@ class NguIndustriesLayouts:
         x += 1
     # self.logger.debug(f'Checking x: {x}, y: {y}')
     if layout[y][x] == self.empty:
-      must_be_empty = self._poorly_affects_existing_beacons(layout, x, y)
+      must_be_empty = self._is_counterproductive(layout, x, y)
       # try all 4 beacons and no beacon
       for option in self.options:
         layout[y][x] = option
@@ -133,16 +133,16 @@ class NguIndustriesLayouts:
         if self.write_each_new_best:
           self._write_to_file(self.best_layout, self.current_filename)
 
-  def _poorly_affects_existing_beacons(cls, layout, x, y):
+  def _is_counterproductive(cls, layout, x, y):
     for k in range(-2, 2):
       for j in range(-2, 2):
         if j == k == 0: continue
         elif abs(j) == abs(k) == 2: continue
         elif abs(j) == 2 or abs(k) == 2:
-          if layout[y+k][x+j] == cls.bk and cls._knight_touching_count(layout, x + j, y + k) < cls.bk_threshold: return True
-          elif layout[y+k][x+j] == cls.pk and cls._knight_touching_count(layout, x + j, y + k) < cls.pk_threshold: return True
-        elif layout[y+k][x+j] == cls.bb and cls._box_touching_count(layout, x + j, y + k) < cls.bb_threshold: return True
-        elif layout[y+k][x+j] == cls.pb and cls._box_touching_count(layout, x + j, y + k) < cls.pb_threshold: return True
+          if layout[y+k][x+j] == cls.bk and cls._knight_touching_count(layout, x + j, y + k) < cls.bk_threshold + 1: return True
+          elif layout[y+k][x+j] == cls.pk and cls._knight_touching_count(layout, x + j, y + k) < cls.pk_threshold + 1: return True
+        elif layout[y+k][x+j] == cls.bb and cls._box_touching_count(layout, x + j, y + k) < cls.bb_threshold + 1: return True
+        elif layout[y+k][x+j] == cls.pb and cls._box_touching_count(layout, x + j, y + k) < cls.pb_threshold + 1: return True
 
   def _box_touching_count(cls, layout, x, y):
     return (1 if layout[y-1][x] == cls.empty else 0) + \
