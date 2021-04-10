@@ -1,6 +1,7 @@
 #! /bin/python3
 
 import logging
+import math
 import sys
 import time
 from copy import deepcopy
@@ -9,47 +10,53 @@ class NguIndustriesLayouts:
   # CAUTION, commented out debug messages create multiple GB of logs and drastically slow performance
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
-  # files = ['TutorialIslandSmall.txt', 'TutorialIslandMain.txt', 'FleshWorld.txt']
+  # default values
+  # files = ['TutorialIslandMain.txt', 'FleshWorld.txt']
   files = ['TutorialIslandMain.txt']
   write_each_new_best = True
-  with_speed = False
-  without_speed = True
+  with_blue = False
+  with_pink = True
+  with_boxes = True
+  with_knights = False
+  with_arrows = False #TODO
+  with_walls = False #TODO
+  beacon_ratio = 5/24
   empty = '0'
   bb = 'b'
   bb_bonus = 0.4
-  bb_threshold = 1 / bb_bonus
+  bb_threshold = math.ceil(1 / bb_bonus)
   bk = 'B'
   bk_bonus = 0.35
-  bk_threshold = 1 / bk_bonus
+  bk_threshold = math.ceil(1 / bk_bonus)
   pb = 'p'
   pb_bonus = 0.3
-  pb_threshold = 1 / pb_bonus
+  pb_threshold = math.ceil(1 / pb_bonus)
   pk = 'K'
   pk_bonus = 0.35
-  pk_threshold = 1 / pk_bonus
+  pk_threshold = math.ceil(1 / pk_bonus)
 
   def __init__(self):
-    pass
+    if len(sys.argv) > 1:
+      self.files = sys.argv[1:]
+    self.logger.info(f'Empty = {self.empty}')
+    self._one_time_setup()
 
   def print_beacon_layouts(self):
-    self.logger.info(f'Empty = {self.empty}')
-    self.logger.info(f'Blue Box = {self.bb}')
-    self.logger.info(f'Pink Box = {self.pb}')
-    self.logger.info(f'Blue Knight = {self.bk}')
-    self.logger.info(f'Pink Knight = {self.pk}')
     for filename in self.files:
+      self.base_filename = filename
       self.logger.info(f'Finding best layouts for {filename}')
       self._read_file(filename)
-      self.base_filename = filename
-      self._create_layouts()
+      self._repeat_setup()
+      self._create_layout()
+      self.logger.info(f'Approximate best calculated layout with given settings {self.beacons}')
+      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value / 100}')
+      self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
 
   def _read_file(self, filename):
     self.base_layout = []
     with open(filename, 'r') as f:
       for line in f.readlines():
         self.base_layout.append([space for space in line if space != '\n'])
-    self._pad_layout(self.base_layout)
-    self.base_value = self._layout_value(self.base_layout)
 
   def _pad_layout(cls, layout):
     max_length =  max([len(line) for line in layout])
@@ -61,44 +68,55 @@ class NguIndustriesLayouts:
     layout.insert(0, [''] * (max_length + 4))
     layout.insert(0, [''] * (max_length + 4))
 
-  def _create_layouts(self):
-    # common setup
+  def _one_time_setup(self):
+    self.never_bb = True
+    self.never_pb = True
+    self.never_bk = True
+    self.never_pk = True
+    self.beacons = [self.empty]
+    self.filename_extras = ""
+    if self.with_blue:
+      if self.with_boxes:
+        self.never_bb = False
+        self.beacons.append(self.bb)
+        self.filename_extras += "bb_"
+        self.logger.info(f'Blue Box = {self.bb}')
+      if self.with_knights:
+        self.never_bk = False
+        self.beacons.append(self.bk)
+        self.filename_extras += "bk_"
+        self.logger.info(f'Blue Knight = {self.bk}')
+    if self.with_pink:
+      if self.with_boxes:
+        self.never_pb = False
+        self.beacons.append(self.pb)
+        self.filename_extras += "pb_"
+        self.logger.info(f'Pink Box = {self.pb}')
+      if self.with_knights:
+        self.never_pk = False
+        self.beacons.append(self.pk)
+        self.filename_extras += "pk_"
+        self.logger.info(f'Pink Knight = {self.pk}')
+    self.filename_extras += str(math.floor(time.time()))
+
+  def _repeat_setup(self):
+    self._pad_layout(self.base_layout)
+    self.base_value = self._layout_value(self.base_layout)
+    self.max_beacons = math.floor(self.base_value * self.beacon_ratio / 100)
     self.x_max = len(self.base_layout[0])
     self.y_max = len(self.base_layout)
-    # layout with speed
-    if self.with_speed:
-      # self.options = [self.empty, self.bb, self.bk, self.pb, self.pk]
-      self.options = [self.empty, self.bb]
-      self.current_filename = '{0}_best_{2}.{1}'.format(*self.base_filename.split('.', 1), time.time())
-      self._create_layout()
-      self.logger.info('Best possible layout ignoring speed caps and rounding errors:')
-      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
-      self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
-    # layout without speed
-    if self.without_speed:
-      # self.options = [self.empty, self.pb, self.pk]
-      self.options = [self.empty, self.pb]
-      self.current_filename = '{0}_speedless_{2}.{1}'.format(*self.base_filename.split('.', 1), time.time())
-      self._create_layout()
-      self.logger.info('Best layout for buildings that have reached the speed cap (still ignoring rounding errors):')
-      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
-      self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
-
-  def _create_layout(self):
-    # reset and recurse
     self.permutations = 0
     self.best_layout = []
     self.best_value = 0
-    self.never_bb = self.bb not in self.options
-    self.never_pb = self.pb not in self.options
-    self.never_bk = self.bk not in self.options
-    self.never_pk = self.pk not in self.options
-    self._recurse_layout(deepcopy(self.base_layout), 2, 2, self.base_value)
+    self.current_filename = '{0}_{2}.{1}'.format(*self.base_filename.split('.', 1), self.filename_extras)
+
+  def _create_layout(self):
+    self._recurse_layout(deepcopy(self.base_layout), 2, 2, self.base_value, 0)
     self.logger.debug(f'Tried {self.permutations} permutations for {self.current_filename}')
     if not self.write_each_new_best:
       self._write_to_file(self.best_layout, self.current_filename)
 
-  def _recurse_layout(self, layout, x, y, value):
+  def _recurse_layout(self, layout, x, y, value, beacons_used):
     # without logic to eliminate permutations early, this will check about 10^158
     while layout[y][x] != self.empty and (x < self.x_max - 2 or y < self.y_max - 2):
       # self.logger.debug(f'Checking x: {x}, y: {y}')
@@ -118,33 +136,38 @@ class NguIndustriesLayouts:
       no_pk = self.never_pk or knight_count < self.pk_threshold
       # self.logger.debug(f'no_bb: {no_bb}, no_pb: {no_pb}, no_bk: {no_bk}, no_pk: {no_pk}')
       # try all 4 beacons and no beacon
-      for option in self.options:
-        layout[y][x] = option
-        if option != self.empty:
+      for beacon in self.beacons:
+        layout[y][x] = beacon
+        if beacon != self.empty:
+          # limit the number of beacons used to 1/5 of the layout based on testing
+          beacons_used += 1
           # limit permutations by checking if any beacon would be useless or counterproductive
           # by also checking if any beacons affecting this space would lose their usefulness
-          if (no_bb and no_pb and no_bk and no_pk) or self._is_counterproductive(layout, x, y):
+          if (beacons_used > self.max_beacons) or \
+             (no_bb and no_pb and no_bk and no_pk) or \
+              self._is_counterproductive(layout, x, y):
             break
           # limit permutations by checking if this specific type of beacon would be useless
-          elif (option == self.bb and no_bb) or \
-               (option == self.pb and no_pb) or \
-               (option == self.bk and no_bk) or \
-               (option == self.pk and no_pk):
+          elif (beacon == self.bb and no_bb) or \
+               (beacon == self.pb and no_pb) or \
+               (beacon == self.bk and no_bk) or \
+               (beacon == self.pk and no_pk):
             continue
           value = self._layout_value(layout)
         # limit permutations by abandoning paths that start by lowering productivity
         if value >= empty_value:
-          # self.logger.debug(f'Trying x: {x}, y: {y}, beacon: {option}')
-          self._recurse_layout(deepcopy(layout), x + 1, y, value)
+          # self.logger.debug(f'Trying x: {x}, y: {y}, beacon: {beacon}')
+          self._recurse_layout(deepcopy(layout), x + 1, y, value, beacons_used)
     else:
       # last in the chain of recursions
       self.permutations += 1
-      # self.logger.debug(f'Checking permutation {self.permutations} with value {value}')
+      # self.logger.debug(f'Checking permutation {self.permutations} with value {value / 100}')
       if value > self.best_value:
         self.best_layout = deepcopy(layout)
         self.best_value = value
-        self.logger.debug(f'New best value at permutation {self.permutations}: {value}')
+        self.logger.debug(f'New best value at permutation {self.permutations}: {value / 100}')
         if self.write_each_new_best:
+          # self.logger.debug('\n' + self._pretty_format_layout(layout))
           self._write_to_file(self.best_layout, self.current_filename)
 
   def _is_counterproductive(cls, layout, x, y):
@@ -225,14 +248,14 @@ class NguIndustriesLayouts:
           if layout[y+2][x+1] == cls.pk: beacons[3] += 1
           if layout[y+1][x+2] == cls.pk: beacons[3] += 1
           value = cls._space_value(beacons)
-          # cls.logger.debug(f'x: {x}, y: {y}, val: {value}')
+          # cls.logger.debug(f'x: {x}, y: {y}, val: {value / 100}')
           total_value += value
-    # cls.logger.debug(f'Total: {total_value}')
+    # cls.logger.debug(f'Total: {total_value / 100}')
     # cls.logger.debug('\n' + cls._pretty_format_layout(layout))
     return total_value
 
   def _space_value(cls, beacons):
-    return (1 + (cls.bb_bonus * beacons[0]) + (cls.bk_bonus * beacons[2])) * (1 + (cls.pb_bonus * beacons[1]) + (cls.pk_bonus * beacons[3]))
+    return round(100 * (1 + (cls.bb_bonus * beacons[0]) + (cls.bk_bonus * beacons[2])) * (1 + (cls.pb_bonus * beacons[1]) + (cls.pk_bonus * beacons[3])))
 
   def _write_to_file(cls, layout, filename):
     with open(filename, 'w') as f:
