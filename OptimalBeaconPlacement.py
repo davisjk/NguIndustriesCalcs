@@ -2,28 +2,31 @@
 
 import logging
 import sys
+import time
 from copy import deepcopy
-from math import ceil
 
 class NguIndustriesLayouts:
   # CAUTION, commented out debug messages create multiple GB of logs and drastically slow performance
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
-  files = ['TutorialIslandSmall.txt', 'TutorialIslandMain.txt']#, 'FleshWorld.txt']
+  # files = ['TutorialIslandSmall.txt', 'TutorialIslandMain.txt', 'FleshWorld.txt']
+  files = ['TutorialIslandMain.txt']
   write_each_new_best = True
+  with_speed = False
+  without_speed = True
   empty = '0'
   bb = 'b'
   bb_bonus = 0.4
-  bb_threshold = ceil(1 / bb_bonus)
+  bb_threshold = 1 / bb_bonus
   bk = 'B'
   bk_bonus = 0.35
-  bk_threshold = ceil(1 / bk_bonus)
+  bk_threshold = 1 / bk_bonus
   pb = 'p'
   pb_bonus = 0.3
-  pb_threshold = ceil(1 / pb_bonus)
+  pb_threshold = 1 / pb_bonus
   pk = 'K'
   pk_bonus = 0.35
-  pk_threshold = ceil(1 / pk_bonus)
+  pk_threshold = 1 / pk_bonus
 
   def __init__(self):
     pass
@@ -63,25 +66,33 @@ class NguIndustriesLayouts:
     self.x_max = len(self.base_layout[0])
     self.y_max = len(self.base_layout)
     # layout with speed
-    # self.options = [self.empty, self.bb, self.bk, self.pb, self.pk]
-    # self.current_filename = '{0}_best.{1}'.format(*self.base_filename.split('.', 1))
-    # self._create_layout()
-    # self.logger.info('Best possible layout ignoring speed caps and rounding errors:')
-    # self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
-    # self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
+    if self.with_speed:
+      # self.options = [self.empty, self.bb, self.bk, self.pb, self.pk]
+      self.options = [self.empty, self.bb]
+      self.current_filename = '{0}_best_{2}.{1}'.format(*self.base_filename.split('.', 1), time.time())
+      self._create_layout()
+      self.logger.info('Best possible layout ignoring speed caps and rounding errors:')
+      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
+      self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
     # layout without speed
-    self.options = [self.empty, self.pb, self.pk]
-    self.current_filename = '{0}_speedless.{1}'.format(*self.base_filename.split('.', 1))
-    self._create_layout()
-    self.logger.info('Best layout for buildings that have reached the speed cap (still ignoring rounding errors):')
-    self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
-    self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
+    if self.without_speed:
+      # self.options = [self.empty, self.pb, self.pk]
+      self.options = [self.empty, self.pb]
+      self.current_filename = '{0}_speedless_{2}.{1}'.format(*self.base_filename.split('.', 1), time.time())
+      self._create_layout()
+      self.logger.info('Best layout for buildings that have reached the speed cap (still ignoring rounding errors):')
+      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value}')
+      self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
 
   def _create_layout(self):
     # reset and recurse
     self.permutations = 0
     self.best_layout = []
     self.best_value = 0
+    self.never_bb = self.bb not in self.options
+    self.never_pb = self.pb not in self.options
+    self.never_bk = self.bk not in self.options
+    self.never_pk = self.pk not in self.options
     self._recurse_layout(deepcopy(self.base_layout), 2, 2, self.base_value)
     self.logger.debug(f'Tried {self.permutations} permutations for {self.current_filename}')
     if not self.write_each_new_best:
@@ -101,10 +112,10 @@ class NguIndustriesLayouts:
       empty_value = value
       box_count = self._box_touching_count(layout, x, y)
       knight_count = self._knight_touching_count(layout, x, y)
-      no_bb = box_count < self.bb_threshold
-      no_pb = box_count < self.pb_threshold
-      no_bk = knight_count < self.bk_threshold
-      no_pk = knight_count < self.pk_threshold
+      no_bb = self.never_bb or box_count < self.bb_threshold
+      no_pb = self.never_pb or box_count < self.pb_threshold
+      no_bk = self.never_bk or knight_count < self.bk_threshold
+      no_pk = self.never_pk or knight_count < self.pk_threshold
       # self.logger.debug(f'no_bb: {no_bb}, no_pb: {no_pb}, no_bk: {no_bk}, no_pk: {no_pk}')
       # try all 4 beacons and no beacon
       for option in self.options:
