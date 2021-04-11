@@ -11,8 +11,8 @@ class NguIndustriesLayouts:
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
   # default values
-  # files = ['TutorialIslandMain.txt', 'FleshWorld.txt']
-  files = ['TutorialIslandMain.txt']
+  files = ['TutorialIslandMain.txt']#, 'FleshWorld.txt']
+  write_file = True
   write_each_new_best = True
   with_blue = False
   with_pink = True
@@ -20,7 +20,7 @@ class NguIndustriesLayouts:
   with_knights = False
   with_arrows = False #TODO
   with_walls = False #TODO
-  beacon_ratio = 5/24
+  efficiency_buffer = 1.12
   empty = '0'
   bb = 'b'
   bb_bonus = 0.4
@@ -49,7 +49,7 @@ class NguIndustriesLayouts:
       self._repeat_setup()
       self._create_layout()
       self.logger.info(f'Approximate best calculated layout with given settings {self.beacons}')
-      self.logger.info(f'Effective multiplier to base production with this layout is {self.best_value/self.base_value} with a total of {self.best_value / 100}')
+      self.logger.info(f'Effective bonus to base production with this layout is {round((100 * self.best_value/self.base_value) - 100, 2)}% with a total production of {self.best_value}')
       self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
 
   def _read_file(self, filename):
@@ -102,7 +102,7 @@ class NguIndustriesLayouts:
   def _repeat_setup(self):
     self._pad_layout(self.base_layout)
     self.base_value = self._layout_value(self.base_layout)
-    self.max_beacons = math.floor(self.base_value * self.beacon_ratio / 100)
+    self.beacon_bonus_ratio = 0.116927 * self.base_value * math.exp(-0.039872 * self.base_value)
     self.x_max = len(self.base_layout[0])
     self.y_max = len(self.base_layout)
     self.permutations = 0
@@ -119,13 +119,13 @@ class NguIndustriesLayouts:
   def _recurse_layout(self, layout, x, y, value, beacons_used):
     # without logic to eliminate permutations early, this will check about 10^158
     while layout[y][x] != self.empty and (x < self.x_max - 2 or y < self.y_max - 2):
-      # self.logger.debug(f'Checking x: {x}, y: {y}')
+      # self.logger.debug(f'Checking x: {x-2}, y: {y-2}')
       if x >= self.x_max - 2:
         x = 2
         y += 1
       else:
         x += 1
-    # self.logger.debug(f'Checking x: {x}, y: {y}')
+    # self.logger.debug(f'Checking x: {x-2}, y: {y-2}')
     if layout[y][x] == self.empty:
       empty_value = value
       box_count = self._box_touching_count(layout, x, y)
@@ -139,33 +139,31 @@ class NguIndustriesLayouts:
       for beacon in self.beacons:
         layout[y][x] = beacon
         if beacon != self.empty:
-          # limit the number of beacons used to 1/5 of the layout based on testing
           beacons_used += 1
-          # limit permutations by checking if any beacon would be useless or counterproductive
-          # by also checking if any beacons affecting this space would lose their usefulness
-          if (beacons_used > self.max_beacons) or \
-             (no_bb and no_pb and no_bk and no_pk) or \
-              self._is_counterproductive(layout, x, y):
-            break
+          # limit permutations by checking if any beacon would be useless
+          if no_bb and no_pb and no_bk and no_pk: return
+          # or counterproductive by also checking if any beacons affecting this space would lose their usefulness
+          if self._is_counterproductive(layout, x, y): return
           # limit permutations by checking if this specific type of beacon would be useless
-          elif (beacon == self.bb and no_bb) or \
-               (beacon == self.pb and no_pb) or \
-               (beacon == self.bk and no_bk) or \
-               (beacon == self.pk and no_pk):
+          if (beacon == self.bb and no_bb) or \
+             (beacon == self.pb and no_pb) or \
+             (beacon == self.bk and no_bk) or \
+             (beacon == self.pk and no_pk):
             continue
           value = self._layout_value(layout)
         # limit permutations by abandoning paths that start by lowering productivity
-        if value >= empty_value:
-          # self.logger.debug(f'Trying x: {x}, y: {y}, beacon: {beacon}')
+        # or that lower the average beacon productivity below the expected curve
+        if value >= empty_value and (beacon == self.empty or self.beacon_bonus_ratio * beacons_used / (value - self.base_value) <= self.efficiency_buffer):
+          # self.logger.debug(f'Trying x: {x-2}, y: {y-2}, beacon: {beacon}')
           self._recurse_layout(deepcopy(layout), x + 1, y, value, beacons_used)
     else:
       # last in the chain of recursions
       self.permutations += 1
-      # self.logger.debug(f'Checking permutation {self.permutations} with value {value / 100}')
+      # self.logger.debug(f'Checking permutation {self.permutations} with value {value}')
       if value > self.best_value:
         self.best_layout = deepcopy(layout)
         self.best_value = value
-        self.logger.debug(f'New best value at permutation {self.permutations}: {value / 100}')
+        self.logger.debug(f'New best value at permutation {self.permutations}: {value}')
         if self.write_each_new_best:
           # self.logger.debug('\n' + self._pretty_format_layout(layout))
           self._write_to_file(self.best_layout, self.current_filename)
@@ -248,18 +246,19 @@ class NguIndustriesLayouts:
           if layout[y+2][x+1] == cls.pk: beacons[3] += 1
           if layout[y+1][x+2] == cls.pk: beacons[3] += 1
           value = cls._space_value(beacons)
-          # cls.logger.debug(f'x: {x}, y: {y}, val: {value / 100}')
+          # cls.logger.debug(f'x: {x-2}, y: {y-2} affected by {beacons} with effective productivity: {value}')
           total_value += value
-    # cls.logger.debug(f'Total: {total_value / 100}')
+    # cls.logger.debug(f'Total: {total_value}')
     # cls.logger.debug('\n' + cls._pretty_format_layout(layout))
-    return total_value
+    return round(total_value, 2)
 
   def _space_value(cls, beacons):
-    return round(100 * (1 + (cls.bb_bonus * beacons[0]) + (cls.bk_bonus * beacons[2])) * (1 + (cls.pb_bonus * beacons[1]) + (cls.pk_bonus * beacons[3])))
+    return (1 + (cls.bb_bonus * beacons[0]) + (cls.bk_bonus * beacons[1])) * (1 + (cls.pb_bonus * beacons[2]) + (cls.pk_bonus * beacons[3]))
 
   def _write_to_file(cls, layout, filename):
-    with open(filename, 'w') as f:
-      f.write(cls._pretty_format_layout(layout))
+    if cls.write_file:
+      with open(filename, 'w') as f:
+        f.write(cls._pretty_format_layout(layout))
 
   def _pretty_format_layout(cls, layout):
     return '\n'.join([''.join(line) for line in layout if ''.join(line)])
