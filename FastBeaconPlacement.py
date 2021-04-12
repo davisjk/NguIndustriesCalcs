@@ -114,12 +114,20 @@ class NguIBeacons:
   @classmethod
   def _find_best_layout(cls, base_layout, beacons):
     #TODO:
+    # I don't think this way will always find the best layout even on a 3x3 so I'm not going to do it:
     # - loop through every empty space
     # - loop and try each beacon there
     # - find any beacons that are next to too many other beacons/voids
     # - find the best configuration of all of the suboptimal beacons (can this be done in smaller groups?)
     # - check if the total production decreased from the last time we checked this
     # - keep track of all of the beacons that have been tried in each space and skip those beacons in those spaces when looping through
+    # Another way might be to:
+    # - loop through every empty space
+    # - find every space that affects this space
+    #   - if only boxes or knights, only look at thos spaces, etc
+    # - find the best configuration for those spaces with the rest of the layout remaining the same
+    #   - anywhere from 1 to 17 spaces so shouldn't take too long by brute force with a bit of thought
+    # - loop again until the new best value and the old best value are the same
     permutations = 0
     spaces = sum([row.count(cls.empty) for row in base_layout])
     base_value = cls._layout_value(base_layout)
