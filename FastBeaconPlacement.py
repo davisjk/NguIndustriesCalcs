@@ -11,8 +11,15 @@ class NguIBeacons:
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
   # default values
-  files = ['TutorialIslandMain.txt']#, 'FleshWorld.txt']
-  write_file = False
+  files = ['TutorialIsland.txt', 'FleshWorld.txt']
+  output_to_file = True
+  check_all_combinations = True
+  all_combinations = [(True, False, True, False),
+                      (True, False, True, True),
+                      (False, True, True, False),
+                      (False, True, True, True),
+                      (True, True, True, False),
+                      (True, True, True, True)]
   with_blue = False
   with_pink = True
   with_boxes = True
@@ -36,42 +43,57 @@ class NguIBeacons:
   def __init__(self, files):
     if len(files) > 0:
       self.files = files
+    self._setup()
+
+  def _setup(self):
     self.beacons = []
     self.logger.info(f'Empty = {self.empty}')
-    self.filename_extras = ""
+    self.filename_extras = ''
     if self.with_blue:
       if self.with_boxes:
         self.beacons += [self.bb]
-        self.filename_extras += "bb_"
+        self.filename_extras += '_bb'
         self.logger.info(f'Blue Box = {self.bb}')
       if self.with_knights:
         self.beacons += [self.bk]
-        self.filename_extras += "bk_"
+        self.filename_extras += '_bk'
         self.logger.info(f'Blue Knight = {self.bk}')
     if self.with_pink:
       if self.with_boxes:
         self.beacons += [self.pb]
-        self.filename_extras += "pb_"
+        self.filename_extras += '_pb'
         self.logger.info(f'Pink Box = {self.pb}')
       if self.with_knights:
         self.beacons += [self.pk]
-        self.filename_extras += "pk_"
+        self.filename_extras += '_pk'
         self.logger.info(f'Pink Knight = {self.pk}')
-    self.filename_extras += str(math.floor(time.time()))
+    # self.filename_extras += '_' + str(math.floor(time.time()))
 
   def print_beacon_layouts(self):
     for filename in self.files:
-      self.logger.info(f'Finding best layout for {filename} with beacons: {self.beacons}')
-      base_layout = self._read_file(filename)
-      base_value = self._layout_value(base_layout)
-      self.best_value = base_value
-      output_filename = '{0}_{2}.{1}'.format(*filename.split('.', 1), self.filename_extras)
-      best_layout, best_value = self._find_best_layout(base_layout, self.beacons)
-      self.logger.info(f'Approximate best calculated layout with beacons: {self.beacons}')
-      self.logger.info(f'Effective bonus to base production with this layout is {round((100 * best_value / base_value) - 100, 2)}% with a total production of {best_value}')
-      self.logger.info('\n' + self._layout_to_string(best_layout))
-      if self.write_file:
-        self._write_to_file(best_layout, output_filename)
+      if self.check_all_combinations:
+        for combo in self.all_combinations:
+          self.with_blue, self.with_pink, self.with_boxes, self.with_knights = combo
+          self._setup()
+          self._find_layouts(filename)
+      else:
+        self._setup()
+        self._find_layouts(filename)
+
+  def _find_layouts(self, filename):
+    self.logger.info(f'Finding best layout for {filename} with beacons: {self.beacons}')
+    base_layout = self._read_file(filename)
+    base_value = self._layout_value(base_layout)
+    self.best_value = base_value
+    best_layout, best_value = self._find_best_layout(base_layout, self.beacons)
+    percent_bonus = round((100 * best_value / base_value) - 100, 2)
+    self.logger.info(f'Approximate best calculated layout with beacons: {self.beacons}')
+    self.logger.info(f'Effective bonus to base production with this layout is {percent_bonus}% with a total production of {best_value}')
+    self.logger.info('\n' + self._layout_to_string(best_layout))
+    output_filename = '{0}{2}_fast.{1}'.format(*filename.split('.', 1), self.filename_extras)
+    extra_contents = [f'Effective production: {best_value}', f'Effective bonus to production without beacons: {percent_bonus}%']
+    if self.output_to_file:
+      self._write_file(output_filename, best_layout, extra_contents)
 
   @staticmethod
   def _read_file(filename):
@@ -79,9 +101,11 @@ class NguIBeacons:
       return [[space for space in line if space != '\n'] for line in f.readlines()]
 
   @staticmethod
-  def _write_file(filename, layout):
+  def _write_file(filename, layout, extra):
     with open(filename, 'w') as f:
-      f.write(NguIBeacons._layout_to_string(self.layout))
+      f.write(NguIBeacons._layout_to_string(layout))
+      if extra:
+        f.write('\n\n' + '\n'.join(extra))
 
   @staticmethod
   def _layout_to_string(layout):
@@ -104,16 +128,17 @@ class NguIBeacons:
     prev_layout = base_layout
     prev_value = base_value
     while permutations < spaces:
-      # cls.logger.debug(f'Starting permutation {permutations + 1}')
-      i = 0
+      permutations += 1
+      # cls.logger.debug(f'Starting permutation {permutations}')
+      start = 1
       layout = deepcopy(base_layout)
       prev_layout = base_layout
       prev_value = base_value
       for y in range(0, len(layout)):
         for x in range(0, len(layout[y])):
           if layout[y][x] == cls.empty:
-            if i < permutations:
-              i += 1
+            if start < permutations:
+              start += 1
             else:
               for beacon in beacons:
                 layout[y][x] = beacon
@@ -122,12 +147,11 @@ class NguIBeacons:
                   prev_layout = deepcopy(layout)
                   prev_value = value
               layout = deepcopy(prev_layout)
-      permutations += 1
       if prev_value > best_value:
         best_layout = prev_layout
         best_value = prev_value
         cls.logger.debug(f'New best value at permutation {permutations}: {best_value}')
-        cls.logger.debug('\n' + cls._layout_to_string(best_layout))
+        # cls.logger.debug('\n' + cls._layout_to_string(best_layout))
       # else:
         # cls.logger.debug(f'Checked permutation {permutations} with value: {prev_value}')
         # cls.logger.debug('\n' + cls._layout_to_string(prev_layout))
