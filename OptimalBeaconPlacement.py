@@ -11,7 +11,7 @@ class NguIndustriesLayouts:
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
   # default values
-  files = ['TutorialIslandMain.txt']#, 'FleshWorld.txt']
+  files = ['TutorialIslandMain.txt', 'FleshWorld.txt']
   write_file = True
   write_each_new_best = True
   with_blue = False
@@ -44,11 +44,11 @@ class NguIndustriesLayouts:
   def print_beacon_layouts(self):
     for filename in self.files:
       self.base_filename = filename
-      self.logger.info(f'Finding best layouts for {filename}')
+      self.logger.info(f'Finding best layout for {filename} with beacons: {self.beacons}')
       self._read_file(filename)
-      self._repeat_setup()
+      self._repeated_setup()
       self._create_layout()
-      self.logger.info(f'Approximate best calculated layout with given settings {self.beacons}')
+      self.logger.info(f'Approximate best calculated layout with beacons: {self.beacons}')
       self.logger.info(f'Effective bonus to base production with this layout is {round((100 * self.best_value/self.base_value) - 100, 2)}% with a total production of {self.best_value}')
       self.logger.info('\n' + self._pretty_format_layout(self.best_layout))
 
@@ -98,16 +98,18 @@ class NguIndustriesLayouts:
         self.filename_extras += "pk_"
         self.logger.info(f'Pink Knight = {self.pk}')
     self.filename_extras += str(math.floor(time.time()))
+    self.logger.info(f'Efficiency buffer = {round((self.efficiency_buffer - 1) * 100, 2)}%')
 
-  def _repeat_setup(self):
+  def _repeated_setup(self):
     self._pad_layout(self.base_layout)
     self.base_value = self._layout_value(self.base_layout)
-    self.beacon_bonus_ratio = 0.116927 * self.base_value * math.exp(-0.039872 * self.base_value)
+    self.beacon_efficiency_ratio = 0.116927 * self.base_value * math.exp(-0.039872 * self.base_value)
+    self.logger.info(f'Beacon efficiency ratio = {self.beacon_efficiency_ratio}')
     self.x_max = len(self.base_layout[0])
     self.y_max = len(self.base_layout)
     self.permutations = 0
-    self.best_layout = []
-    self.best_value = 0
+    self.best_layout = self.base_layout
+    self.best_value = self.base_value
     self.current_filename = '{0}_{2}.{1}'.format(*self.base_filename.split('.', 1), self.filename_extras)
 
   def _create_layout(self):
@@ -153,7 +155,7 @@ class NguIndustriesLayouts:
           value = self._layout_value(layout)
         # limit permutations by abandoning paths that start by lowering productivity
         # or that lower the average beacon productivity below the expected curve
-        if value >= empty_value and (beacon == self.empty or self.beacon_bonus_ratio * beacons_used / (value - self.base_value) <= self.efficiency_buffer):
+        if value >= empty_value and (beacon == self.empty or self.beacon_efficiency_ratio * beacons_used / (value - self.base_value) <= self.efficiency_buffer):
           # self.logger.debug(f'Trying x: {x-2}, y: {y-2}, beacon: {beacon}')
           self._recurse_layout(deepcopy(layout), x + 1, y, value, beacons_used)
     else:
@@ -169,8 +171,8 @@ class NguIndustriesLayouts:
           self._write_to_file(self.best_layout, self.current_filename)
 
   def _is_counterproductive(cls, layout, x, y):
-    for k in range(-2, 2):
-      for j in range(-2, 2):
+    for k in range(-2, 3):
+      for j in range(-2, 3):
         if j == k == 0: continue
         elif abs(j) == abs(k) == 2: continue
         elif abs(j) == 2 or abs(k) == 2:
