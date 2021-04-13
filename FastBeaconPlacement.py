@@ -160,6 +160,7 @@ class NguIMapper:
       space = spaces.pop()
       for beacon in self.beacons:
         # self.logger.debug(f'Checking {beacon} in {space}')
+        #TODO, use logic in _recurse_layout to skip some beacons
         layout[space[1]][space[0]] = beacon
         best_layout, best_value, permutations = self._recurse_sublayout(deepcopy(layout), spaces, best_layout, best_value, permutations)
     value = self._layout_value(layout)
