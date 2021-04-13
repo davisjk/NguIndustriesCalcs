@@ -1,120 +1,193 @@
 #! /bin/python3
 
+import argparse
 import logging
 import math
 import sys
 import time
 from copy import deepcopy
 
-class NguIBeacons:
+class NguIMapper:
   # CAUTION, commented out debug messages create multiple GB of logs and drastically slow performance
   logging.basicConfig(stream=sys.stdout, format='%(asctime)s %(levelname)-5s %(message)s', level=logging.DEBUG)
   logger = logging.getLogger()
-  # default values
-  files = ['TutorialIsland.txt', 'FleshWorld.txt']
-  output_to_file = True
-  check_all_combinations = True
-  all_combinations = [(True, False, True, False),
-                      (True, False, True, True),
-                      (False, True, True, False),
-                      (False, True, True, True),
-                      (True, True, True, False),
-                      (True, True, True, True)]
-  with_blue = False
-  with_pink = True
-  with_boxes = True
-  with_knights = False
-  with_arrows = False #TODO
-  with_walls = False #TODO
+  # constants
+  all_combos = [(True, False, True, False),
+                (True, False, True, True),
+                (False, True, True, False),
+                (False, True, True, True),
+                (True, True, True, False),
+                (True, True, True, True)]
   empty = '0'
-  bb = 'b'
-  bb_bonus = 0.4
-  bb_threshold = math.ceil(1 / bb_bonus)
+  bx = 'b'
+  bx_bonus = 0.4
+  bx_threshold = math.ceil(1 / bx_bonus)
   bk = 'B'
   bk_bonus = 0.35
   bk_threshold = math.ceil(1 / bk_bonus)
-  pb = 'p'
-  pb_bonus = 0.3
-  pb_threshold = math.ceil(1 / pb_bonus)
+  px = 'p'
+  px_bonus = 0.3
+  px_threshold = math.ceil(1 / px_bonus)
   pk = 'K'
   pk_bonus = 0.35
   pk_threshold = math.ceil(1 / pk_bonus)
 
-  def __init__(self, files):
-    if len(files) > 0:
-      self.files = files
+  def __init__(self):
+    self._parse_args()
     self._setup()
 
+  def _parse_args(self):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--all', action='store_true')
+    parser.add_argument('-b', '--blue', action='store_true')
+    parser.add_argument('-p', '--pink', action='store_true')
+    parser.add_argument('-x', '--boxes', action='store_true')
+    parser.add_argument('-k', '--knights', action='store_true')
+    # parser.add_argument('-r', '--arrows', action='store_true')
+    # parser.add_argument('-w', '--walls', action='store_true')
+    parser.add_argument('-o', '--output', action='store_true')
+    parser.add_argument('files', nargs='*')
+    self.args = vars(parser.parse_args())
+
   def _setup(self):
-    self.beacons = []
+    self.beacons = [self.empty]
     self.logger.info(f'Empty = {self.empty}')
-    self.filename_extras = ''
-    if self.with_blue:
-      if self.with_boxes:
-        self.beacons += [self.bb]
-        self.filename_extras += '_bb'
-        self.logger.info(f'Blue Box = {self.bb}')
-      if self.with_knights:
+    self.filename_id = ''
+    if self.args['blue']:
+      if self.args['boxes']:
+        self.beacons += [self.bx]
+        self.filename_id += '_bx'
+        self.logger.info(f'Blue Box = {self.bx}')
+      if self.args['knights']:
         self.beacons += [self.bk]
-        self.filename_extras += '_bk'
+        self.filename_id += '_bk'
         self.logger.info(f'Blue Knight = {self.bk}')
-    if self.with_pink:
-      if self.with_boxes:
-        self.beacons += [self.pb]
-        self.filename_extras += '_pb'
-        self.logger.info(f'Pink Box = {self.pb}')
-      if self.with_knights:
+    if self.args['pink']:
+      if self.args['boxes']:
+        self.beacons += [self.px]
+        self.filename_id += '_px'
+        self.logger.info(f'Pink Box = {self.px}')
+      if self.args['knights']:
         self.beacons += [self.pk]
-        self.filename_extras += '_pk'
+        self.filename_id += '_pk'
         self.logger.info(f'Pink Knight = {self.pk}')
-    # self.filename_extras += '_' + str(math.floor(time.time()))
+    # self.filename_id += '_' + str(math.floor(time.time()))
+    self.filename_id += '_fast'
 
   def print_beacon_layouts(self):
-    for filename in self.files:
-      if self.check_all_combinations:
-        for combo in self.all_combinations:
-          self.with_blue, self.with_pink, self.with_boxes, self.with_knights = combo
+    for filename in self.args['files']:
+      if self.args['all']:
+        for combo in self.all_combos:
+          self.args['blue'], self.args['pink'], self.args['boxes'], self.args['knights'] = combo
           self._setup()
-          self._find_layouts(filename)
+          self._find_best_layout(filename)
       else:
-        self._setup()
-        self._find_layouts(filename)
+        self._find_best_layout(filename)
 
-  def _find_layouts(self, filename):
+  def _read_file(self, filename):
+    with open(filename, 'r') as f:
+      return [[space for space in line if space != '\n'] for line in f.readlines()]
+
+  def _write_file(self, filename, layout, extra):
+    with open(filename, 'w') as f:
+      f.write(self._layout_to_string(layout))
+      if extra:
+        f.write('\n\n' + '\n'.join(extra))
+
+  def _layout_to_string(self, layout):
+    return '\n'.join([''.join(line) for line in layout if ''.join(line)])
+
+  def _find_best_layout(self, filename):
     self.logger.info(f'Finding best layout for {filename} with beacons: {self.beacons}')
+    permutations = 0
     base_layout = self._read_file(filename)
     base_value = self._layout_value(base_layout)
-    self.best_value = base_value
-    best_layout, best_value = self._find_best_layout(base_layout, self.beacons)
+    self.logger.info(f'Starting layout value: {base_value}')
+    best_layout = base_layout
+    best_value = base_value
+    # Another way might be to:
+    # - loop through every empty space
+    # - find every space that affects this space
+    #   - if only boxes or knights, only look at thos spaces, etc
+    # - find the best configuration for those spaces with the rest of the layout remaining the same
+    #   - anywhere from 1 to 17 spaces so shouldn't take too long by brute force with a bit of thought
+    # - loop again until the new best value and the old best value are the same
+    while True:
+      permutations += 1
+      # self.logger.debug(f'Starting permutation {permutations}')
+      layout = deepcopy(base_layout)
+      value = base_value
+      for y in range(0, len(layout)):
+        for x in range(0, len(layout[y])):
+          if layout[y][x] in self.beacons:
+            layout, value = self._find_best_sublayout(layout, x, y)
+      if value > best_value:
+        best_layout = deepcopy(layout)
+        best_value = value
+        self.logger.debug(f'New best layout at permutation {permutations}: {best_value}')
+        # self.logger.debug('\n' + self._layout_to_string(best_layout))
+      elif value == best_value:
+        #TODO, permutations is always 2 which seems wrong
+        self.logger.debug(f'Found best layout after {permutations} permutations')
+        break
+      else:
+        self.logger.error(f'Reached an unexpected state after {permutation} permutations! Current layout value is less than best layout value.')
+        self.logger.error(f'Best value: {best_value}')
+        self.logger.error(f'Best layout: {best_layout}')
+        self.logger.error(f'Current value: {value}')
+        self.logger.error(f'Current layout: {layout}')
+        sys.exit(1)
     percent_bonus = round((100 * best_value / base_value) - 100, 2)
     self.logger.info(f'Approximate best calculated layout with beacons: {self.beacons}')
     self.logger.info(f'Effective bonus to base production with this layout is {percent_bonus}% with a total production of {best_value}')
     self.logger.info('\n' + self._layout_to_string(best_layout))
-    output_filename = '{0}{2}_fast.{1}'.format(*filename.split('.', 1), self.filename_extras)
+    output_filename = '{0}{2}.{1}'.format(*filename.split('.', 1), self.filename_id)
     extra_contents = [f'Effective production: {best_value}', f'Effective bonus to production without beacons: {percent_bonus}%']
-    if self.output_to_file:
+    if self.args['output']:
       self._write_file(output_filename, best_layout, extra_contents)
 
-  @staticmethod
-  def _read_file(filename):
-    with open(filename, 'r') as f:
-      return [[space for space in line if space != '\n'] for line in f.readlines()]
+  def _find_best_sublayout(self, layout, x, y):
+    spaces = self._find_space_subset(layout, x, y)
+    value = self._layout_value(layout)
+    # self.logger.debug(f'Finding best sublayout for {spaces} with starting value: {value}')
+    best_layout, best_value, permutations = self._recurse_sublayout(layout, spaces.copy(), deepcopy(layout), value, 0)
+    # self.logger.debug(f'Found best sublayout after {permutations} permutations: {best_value}')
+    return best_layout, best_value
 
-  @staticmethod
-  def _write_file(filename, layout, extra):
-    with open(filename, 'w') as f:
-      f.write(NguIBeacons._layout_to_string(layout))
-      if extra:
-        f.write('\n\n' + '\n'.join(extra))
+  def _recurse_sublayout(self, layout, spaces, best_layout, best_value, permutations):
+    #TODO, use 2x5 to debug this
+    if spaces:
+      space = spaces.pop()
+      for beacon in self.beacons:
+        # self.logger.debug(f'Checking {beacon} in {space}')
+        layout[space[1]][space[0]] = beacon
+        best_layout, best_value, permutations = self._recurse_sublayout(deepcopy(layout), spaces, best_layout, best_value, permutations)
+    value = self._layout_value(layout)
+    if value > best_value:
+      best_layout = deepcopy(layout)
+      best_value = value
+      # self.logger.debug(f'New best sublayout at permutation {permutations}: {value}')
+      # self.logger.debug('\n' + self._layout_to_string(best_layout))
+    return best_layout, best_value, permutations + 1
 
-  @staticmethod
-  def _layout_to_string(layout):
-    return '\n'.join([''.join(line) for line in layout if ''.join(line)])
+  def _find_space_subset(self, layout, x, y):
+    spaces = []
+    for k in range(-2, 3):
+      if y+k >= 0 and y+k < len(layout):
+        for j in range(-2, 3):
+          if (not self.args['knights'] and (abs(j) == 2 or abs(k) == 2)) or \
+             (not self.args['boxes'] and (j, k) != (0, 0) and abs(j) < 2 and abs(k) < 2) or \
+             abs(j) == abs(k) == 2 or \
+             (abs(j), k) == (2, 0) or \
+             (j, abs(k)) == (0, 2):
+            continue
+          elif x+j >= 0 and x+j < len(layout[y+k]):
+            if layout[y+k][x+j] in [self.empty] + self.beacons:
+              spaces.append((x+j, y+k))
+    return spaces
 
-  @classmethod
-  def _find_best_layout(cls, base_layout, beacons):
-    #TODO:
-    # I don't think this way will always find the best layout even on a 3x3 so I'm not going to do it:
+  def _find_fast_layout(self):
+    # I don't think this way will ever find the best layout even on a 3x3 so I'm not going to do it:
     # - loop through every empty space
     # - loop and try each beacon there
     # - find any beacons that are next to too many other beacons/voids
@@ -128,29 +201,32 @@ class NguIBeacons:
     # - find the best configuration for those spaces with the rest of the layout remaining the same
     #   - anywhere from 1 to 17 spaces so shouldn't take too long by brute force with a bit of thought
     # - loop again until the new best value and the old best value are the same
+    # This is deprecated, but still fast and not terrible at boxes only
+    self.logger.info(f'Finding best layout for {filename} with beacons: {self.beacons}')
     permutations = 0
-    spaces = sum([row.count(cls.empty) for row in base_layout])
-    base_value = cls._layout_value(base_layout)
+    base_layout = self._read_file(filename)
+    base_value = self._layout_value(base_layout)
+    spaces = sum([row.count(self.empty) for row in base_layout])
     best_layout = base_layout
     best_value = base_value
     prev_layout = base_layout
     prev_value = base_value
     while permutations < spaces:
       permutations += 1
-      # cls.logger.debug(f'Starting permutation {permutations}')
+      # self.logger.debug(f'Starting permutation {permutations}')
       start = 1
       layout = deepcopy(base_layout)
       prev_layout = base_layout
       prev_value = base_value
       for y in range(0, len(layout)):
         for x in range(0, len(layout[y])):
-          if layout[y][x] == cls.empty:
+          if layout[y][x] == self.empty:
             if start < permutations:
               start += 1
             else:
               for beacon in beacons:
                 layout[y][x] = beacon
-                value = cls._layout_value(layout)
+                value = self._layout_value(layout)
                 if value > prev_value:
                   prev_layout = deepcopy(layout)
                   prev_value = value
@@ -158,13 +234,20 @@ class NguIBeacons:
       if prev_value > best_value:
         best_layout = prev_layout
         best_value = prev_value
-        cls.logger.debug(f'New best value at permutation {permutations}: {best_value}')
-        # cls.logger.debug('\n' + cls._layout_to_string(best_layout))
+        self.logger.debug(f'New best value at permutation {permutations}: {best_value}')
+        # self.logger.debug('\n' + self._layout_to_string(best_layout))
       # else:
-        # cls.logger.debug(f'Checked permutation {permutations} with value: {prev_value}')
-        # cls.logger.debug('\n' + cls._layout_to_string(prev_layout))
-    cls.logger.debug(f'Checked a total of {permutations} permutations')
-    return best_layout, best_value
+        # self.logger.debug(f'Checked permutation {permutations} with value: {prev_value}')
+        # self.logger.debug('\n' + self._layout_to_string(prev_layout))
+    percent_bonus = round((100 * best_value / base_value) - 100, 2)
+    self.logger.debug(f'Checked a total of {permutations} permutations')
+    self.logger.info(f'Approximate best calculated layout with beacons: {self.beacons}')
+    self.logger.info(f'Effective bonus to base production with this layout is {percent_bonus}% with a total production of {best_value}')
+    self.logger.info('\n' + self._layout_to_string(best_layout))
+    output_filename = '{0}{2}.{1}'.format(*filename.split('.', 1), self.filename_id)
+    extra_contents = [f'Effective production: {best_value}', f'Effective bonus to production without beacons: {percent_bonus}%']
+    if self.output_to_file:
+      self._write_file(output_filename, best_layout, extra_contents)
 
   #TODO, delete this once it's no longer needed as a reference
   def _recurse_layout(self, layout, x, y, value):
@@ -181,22 +264,22 @@ class NguIBeacons:
       empty_value = value
       box_count = self._box_touching_count(layout, x, y)
       knight_count = self._knight_touching_count(layout, x, y)
-      no_bb = self.never_bb or box_count < self.bb_threshold
-      no_pb = self.never_pb or box_count < self.pb_threshold
+      no_bx = self.never_bx or box_count < self.bx_threshold
+      no_px = self.never_px or box_count < self.px_threshold
       no_bk = self.never_bk or knight_count < self.bk_threshold
       no_pk = self.never_pk or knight_count < self.pk_threshold
-      # self.logger.debug(f'no_bb: {no_bb}, no_pb: {no_pb}, no_bk: {no_bk}, no_pk: {no_pk}')
+      # self.logger.debug(f'no_bx: {no_bx}, no_px: {no_px}, no_bk: {no_bk}, no_pk: {no_pk}')
       # try all 4 beacons and no beacon
       for beacon in self.beacons:
         layout[y][x] = beacon
         if beacon != self.empty:
           # limit permutations by checking if any beacon would be useless
-          if no_bb and no_pb and no_bk and no_pk: return
+          if no_bx and no_px and no_bk and no_pk: return
           # or counterproductive by also checking if any beacons affecting this space would lose their usefulness
           if self._is_counterproductive(layout, x, y): return
           # limit permutations by checking if this specific type of beacon would be useless
-          if (beacon == self.bb and no_bb) or \
-             (beacon == self.pb and no_pb) or \
+          if (beacon == self.bx and no_bx) or \
+             (beacon == self.px and no_px) or \
              (beacon == self.bk and no_bk) or \
              (beacon == self.pk and no_pk):
             continue
@@ -217,14 +300,7 @@ class NguIBeacons:
           # self.logger.debug('\n' + self._layout_to_string(layout))
           self._write_to_file()
 
-  @classmethod
-  def _find_suboptimal_beacons(cls, layout):
-    suboptimal = []
-    #TODO
-    return []
-
-  @classmethod
-  def _is_counterproductive(cls, layout, x, y):
+  def _is_counterproductive(self, layout, x, y):
     for k in range(-2, 3):
       for j in range(-2, 3):
         if j == k == 0 or \
@@ -234,19 +310,18 @@ class NguIBeacons:
           continue
         # knights
         elif abs(j) == 2 or abs(k) == 2:
-          if layout[y+k][x+j] == cls.bk and cls._knight_touching_count(layout, x+j, y+k) < cls.bk_threshold:
+          if layout[y+k][x+j] == self.bk and self._knight_touching_count(layout, x+j, y+k) < self.bk_threshold:
             return True
-          elif layout[y+k][x+j] == cls.pk and cls._knight_touching_count(layout, x+j, y+k) < cls.pk_threshold:
+          elif layout[y+k][x+j] == self.pk and self._knight_touching_count(layout, x+j, y+k) < self.pk_threshold:
             return True
         # boxes
         else:
-          if layout[y+k][x+j] == cls.bb and cls._box_touching_count(layout, x+j, y+k) < cls.bb_threshold:
+          if layout[y+k][x+j] == self.bx and self._box_touching_count(layout, x+j, y+k) < self.bx_threshold:
             return True
-          elif layout[y+k][x+j] == cls.pb and cls._box_touching_count(layout, x+j, y+k) < cls.pb_threshold:
+          elif layout[y+k][x+j] == self.px and self._box_touching_count(layout, x+j, y+k) < self.px_threshold:
             return True
 
-  @classmethod
-  def _box_touching_count(cls, layout, x, y):
+  def _box_touching_count(self, layout, x, y):
     count = 0;
     for k in range(-1, 2):
       if y+k >= 0 and y+k < len(layout):
@@ -254,12 +329,11 @@ class NguIBeacons:
           if j == k == 0:
             continue
           elif x+j >= 0 and x+j < len(layout[y+k]):
-            if layout[y+k][x+j] == cls.empty:
+            if layout[y+k][x+j] == self.empty:
               count += 1
     return count
 
-  @classmethod
-  def _knight_touching_count(cls, layout, x, y):
+  def _knight_touching_count(self, layout, x, y):
     count = 0;
     for k in [-2, -1, 1, 2]:
       if y+k >= 0 and y+k < len(layout):
@@ -267,18 +341,17 @@ class NguIBeacons:
           if abs(j) == abs(k):
             continue
           elif x+j >= 0 and x+j < len(layout[y+k]):
-            if layout[y+k][x+j] == cls.empty:
+            if layout[y+k][x+j] == self.empty:
               count += 1
     return count
 
-  @classmethod
-  def _layout_value(cls, layout):
+  def _layout_value(self, layout):
     total = 0
     for y in range(0, len(layout)):
       for x in range(0, len(layout[y])):
-        # [bb, bk, pb, pk]
+        # [bx, bk, px, pk]
         beacons = [0, 0, 0, 0]
-        if layout[y][x] == cls.empty:
+        if layout[y][x] == self.empty:
           for k in range(-2, 3):
             if y+k >= 0 and y+k < len(layout):
               for j in range(-2, 3):
@@ -290,77 +363,28 @@ class NguIBeacons:
                 elif x+j >= 0 and x+j < len(layout[y+k]):
                   # knights
                   if abs(j) == 2 or abs(k) == 2:
-                    if layout[y+k][x+j] == cls.bk:
+                    if layout[y+k][x+j] == self.bk:
                       beacons[1] += 1
-                    elif layout[y+k][x+j] == cls.pk:
+                    elif layout[y+k][x+j] == self.pk:
                       beacons[3] += 1
                   # boxes
                   else:
-                    if layout[y+k][x+j] == cls.bb:
+                    if layout[y+k][x+j] == self.bx:
                       beacons[0] += 1
-                    elif layout[y+k][x+j] == cls.pb:
+                    elif layout[y+k][x+j] == self.px:
                       beacons[2] += 1
-          value = cls._space_value(beacons)
-          # cls.logger.debug(f'x: {x-2}, y: {y-2} affected by {beacons} with effective productivity: {value}')
+          value = self._space_value(beacons)
+          # self.logger.debug(f'x: {x-2}, y: {y-2} affected by {beacons} with effective productivity: {value}')
           total += value
-    # cls.logger.debug(f'Total: {total}')
-    # cls.logger.debug('\n' + cls._layout_to_string(layout))
+    # self.logger.debug(f'Total: {total}')
+    # self.logger.debug('\n' + self._layout_to_string(layout))
     return round(total, 2)
 
-  @classmethod
-  def _space_value(cls, beacons):
-    return (1 + (cls.bb_bonus * beacons[0]) + (cls.bk_bonus * beacons[1])) * (1 + (cls.pb_bonus * beacons[2]) + (cls.pk_bonus * beacons[3]))
-
-def tests():
-  empty_5x5 = [['0','0','0','0','0'],
-               ['0','0','0','0','0'],
-               ['0','0','0','0','0'],
-               ['0','0','0','0','0'],
-               ['0','0','0','0','0']]
-  pb_5x5 = [['0','0','0','0','0'],
-            ['0','p','0','p','0'],
-            ['0','p','0','p','0'],
-            ['0','p','0','p','0'],
-            ['0','0','0','0','0']]
-  pk_5x5 = [['0','0','0','0','0'],
-            ['0','0','K','0','0'],
-            ['0','K','K','K','0'],
-            ['0','0','K','0','0'],
-            ['0','0','0','0','0']]
-  crowded_5x5 = [['0','0','0','0','0'],
-                 ['0','p','p','p','0'],
-                 ['0','p','0','p','0'],
-                 ['0','p','p','p','0'],
-                 ['0','0','0','0','0']]
-  blobland = [['0','0','0'],
-              ['0',' ','0','0','0'],
-              ['0','0'],
-              ['0','0',' ',' ','0']]
-  if NguIBeacons._box_touching_count(empty_5x5, 0, 0) != 3: return False
-  if NguIBeacons._box_touching_count(empty_5x5, 1, 1) != 8: return False
-  if NguIBeacons._box_touching_count(pk_5x5, 0, 0) != 3: return False
-  if NguIBeacons._box_touching_count(pk_5x5, 1, 1) != 5: return False
-  if NguIBeacons._box_touching_count(blobland, 1, 1) != 7: return False
-  if NguIBeacons._box_touching_count(blobland, 1, 2) != 5: return False
-  if NguIBeacons._knight_touching_count(empty_5x5, 0, 0) != 2: return False
-  if NguIBeacons._knight_touching_count(empty_5x5, 1, 1) != 4: return False
-  if NguIBeacons._knight_touching_count(empty_5x5, 2, 2) != 8: return False
-  if NguIBeacons._knight_touching_count(empty_5x5, 4, 4) != 2: return False
-  if NguIBeacons._knight_touching_count(pk_5x5, 0, 0) != 0: return False
-  if NguIBeacons._knight_touching_count(pk_5x5, 1, 1) != 2: return False
-  if NguIBeacons._knight_touching_count(pk_5x5, 2, 2) != 8: return False
-  if NguIBeacons._knight_touching_count(pk_5x5, 4, 4) != 0: return False
-  if NguIBeacons._knight_touching_count(blobland, 1, 1) != 1: return False
-  if NguIBeacons._layout_value(empty_5x5) != 25: return False
-  if NguIBeacons._layout_value(pb_5x5) != 31: return False
-  if NguIBeacons._layout_value(pk_5x5) != 31.2: return False
-  # sys.exit(0)
-  return True
+  def _space_value(self, beacons):
+    return (1 + (self.bx_bonus * beacons[0]) + (self.bk_bonus * beacons[1])) * (1 + (self.px_bonus * beacons[2]) + (self.pk_bonus * beacons[3]))
 
 if __name__ == '__main__':
-  # if not tests():
-    # print('Tests found ERROR')
-    # sys.exit(1)
-  layouts = NguIBeacons(sys.argv[1:])
-  layouts.print_beacon_layouts()
-  layouts.logger.info('Completed creating layouts')
+  # sys.argv += ['-px', '3x3.txt']
+  mapper = NguIMapper()
+  mapper.print_beacon_layouts()
+  mapper.logger.info('Completed finding best layout(s)')

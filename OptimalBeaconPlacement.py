@@ -12,7 +12,7 @@ class NguIndustriesLayouts:
   logger = logging.getLogger()
   # default values
   files = ['TutorialIslandMain.txt', 'FleshWorld.txt']
-  write_file = True
+  write_file = False
   write_each_new_best = True
   with_blue = False
   with_pink = True
