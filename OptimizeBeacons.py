@@ -31,6 +31,13 @@ class NguiBeaconOptimizer:
 
   def __init__(self):
     self._parse_args()
+    # CAUTION, commented out debug messages create multiple GB of logs and drastically slow performance
+    handlers=[logging.StreamHandler(sys.stdout)]
+    if self.args['l']:
+      handlers.append(logging.FileHandler(f"{'_'.join(file.split('.', 1)[0] for file in self.args['files'])}-{''.join([arg for arg in self.args if len(arg) == 1 and self.args[arg]])}_{round(time())}.log"))
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-5s %(message)s', handlers=handlers)
+    self.logger = logging.getLogger()
+    self.logger.debug(self.args)
     self._setup()
 
   def _parse_args(self):
@@ -49,13 +56,6 @@ class NguiBeaconOptimizer:
     self.args = vars(parser.parse_args())
 
   def _setup(self):
-    # CAUTION, commented out debug messages create multiple GB of logs and drastically slow performance
-    handlers=[logging.StreamHandler(sys.stdout)]
-    if self.args['l']:
-      handlers.append(logging.FileHandler(f"{'_'.join(file.split('.', 1)[0] for file in self.args['files'])}-{''.join([arg for arg in self.args if len(arg) == 1 and self.args[arg]])}_{round(time())}.log"))
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-5s %(message)s', handlers=handlers)
-    self.logger = logging.getLogger()
-    self.logger.debug(self.args)
     self.beacons = [self.empty]
     self.logger.info(f'Empty = {self.empty}')
     self.filename_id = ''
