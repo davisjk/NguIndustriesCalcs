@@ -10,10 +10,10 @@ from time import time
 class NguiBeaconOptimizer:
   # constants
   all_combos = [(True, False, True, False),
-                (True, False, True, True),
                 (False, True, True, False),
-                (False, True, True, True),
                 (True, True, True, False),
+                (False, True, True, True),
+                (True, False, True, True),
                 (True, True, True, True)]
   empty = '0'
   bx = 'b'
