@@ -143,6 +143,7 @@ class NguiBeaconOptimizer:
       for y in range(0, len(layout)):
         for x in range(0, len(layout[y])):
           if layout[y][x] in self.beacons:
+            #TODO, make a list of all sublayouts and skip any that are subsets of others
             layout, value = self._find_best_sublayout(layout, x, y, box_counts, knight_counts)
             # self.logger.debug(f'Layout after permutation {permutations} and subset of {x}, {y}:\n{self._layout_to_string(layout)}')
       if value > best_value:
@@ -209,12 +210,13 @@ class NguiBeaconOptimizer:
     return spaces
 
   def _recurse_sublayout(self, layout, spaces, best_layout, best_value, permutations, box_counts, knight_counts):
+    #TODO, looks like there's still a bug in here
+    #see 3x4-alo_1618379690.log and 3x4_bx_px.txt compare 3x4_bx_bk_px_pk.txt
     if spaces:
       space = spaces.pop()
       counterproductive = self._counterproductive_beacon(layout, *space, box_counts, knight_counts)
       for beacon in self.beacons:
         # self.logger.debug(f'Checking {beacon} in {space}')
-        # use logic to skip some beacons
         if beacon == self.empty or not counterproductive:
           if (beacon == self.bx and box_counts[space[1]][space[0]] < self.bx_threshold) or \
              (beacon == self.px and box_counts[space[1]][space[0]] < self.px_threshold) or \
