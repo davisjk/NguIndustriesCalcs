@@ -31,16 +31,17 @@ class NguiBeaconOptimizer:
 
   def __init__(self):
     self._parse_args()
+    arg_dict = vars(self.args)
     handlers=[logging.StreamHandler(sys.stdout)]
     if self.args.l:
-      handlers.append(logging.FileHandler(f"{'_'.join(file.split('.', 1)[0] for file in self.args.files)}-{''.join([arg for arg in self.args if len(arg) == 1 and self.args[arg]])}_{round(time())}.log"))
+      handlers.append(logging.FileHandler(f"{'_'.join(file.split('.', 1)[0] for file in self.args.files)}-{''.join([arg for arg in arg_dict if len(arg) == 1 and arg_dict[arg]])}_{round(time())}.log"))
     if self.args.verbosity > 0:
       level = logging.DEBUG
     else:
       level = logging.INFO
     logging.basicConfig(level=level, format='%(asctime)s %(levelname)-5s %(message)s', handlers=handlers)
     self.logger = logging.getLogger()
-    self.logger.debug(vars(self.args))
+    self.logger.debug(arg_dict)
     self._setup()
 
   def _parse_args(self):
