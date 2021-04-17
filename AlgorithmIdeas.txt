@@ -20,12 +20,7 @@ needs more testing with other layouts that weren't working for "all subsets"
 order that sets are checked in might still matter
 
 # Lines
-check rows then columns then diagonals
-check columns then rows then diagonals
-check diagonals then rows then columns
-check diagonals then columns then rows
-check rows then diagonals then columns
-check columns then diagonals then rows
+check every order of rows, columns, tlbr, bltr
 keep best of all those
 iterate on best and check all combos again until we get the same best twice in a row
 pros:
@@ -56,4 +51,4 @@ very fast to check one space at a time
 cons:
 completely untested
 how many iterations til we can be confident in the result or just call it done?
-wait how is this different from checking every space at once then?!
+wait how is this different from checking every space at once then?! less iterations?

@@ -119,42 +119,69 @@ class NguiBeaconOptimizer:
     # seems checking subset order doesn't matter (I think), but subset overlap does (seems like both actually)
     # TODO, try rows and/or columns? (columns would be faster for real maps) (need at least both in both orders)
     # the whole layout in 1 set
-    all_in_one = [[(x, y) for y in range(0, len(base_layout)) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons]]
+    all_in_one = [set([(x, y) for y in range(0, len(base_layout)) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons])]
     # subsets by affected space groups, order might matter, not sure how to sort
-    space_subsets = [[self._find_space_subset(base_layout, x, y) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons] for y in range(0, len(base_layout))]
+    all_space_subsets = [self._find_space_subset(base_layout, x, y) for y in range(0, len(base_layout)) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons]
+    space_subsets = all_space_subsets.copy()
+    for s in all_space_subsets:
+      while space_subsets.count(s) > 1:
+        self.logger.debug(f'Removing duplicate {s}')
+        space_subsets.remove(s)
     # remove subsets/supersets strategically, order still might matter
     reduced_space_subsets = space_subsets.copy()
     to_remove = set()
-    for s1 in space_subsets:
-      for s2 in space_subsets:
-        if s1 < s2:
-          for s3 in space_subsets:
-            if s1 > s3:
-              to_remove.add(frozenset(s2))
-              to_remove.add(frozenset(s3))
-    for s in to_remove:
-      reduced_space_subsets.remove(s)
-    to_remove = set()
-    for s1 in reduced_space_subsets:
-      for s2 in reduced_space_subsets:
-        if s1 < s2:
-          to_remove.add(frozenset(s1))
-    for s in to_remove:
-      reduced_space_subsets.remove(s)
+    # for s1 in reduced_space_subsets:
+      # for s2 in reduced_space_subsets:
+        # for s3 in reduced_space_subsets:
+          # if s1 < s2 < s3:
+            # self.logger.debug(f'Removing superset {s3} and subset {s1}')
+            # to_remove.add(frozenset(s1))
+            # to_remove.add(frozenset(s3))
+    # for s1 in reduced_space_subsets:
+      # for s2 in reduced_space_subsets:
+        # for s3 in reduced_space_subsets:
+          # if (len(s1) < len(s3) or len(s2) < len(s3)) and s3 < (s1 | s2):
+            # to_remove.add(frozenset(s3))
+    # for s in to_remove:
+      # reduced_space_subsets.remove(s)
+    # to_remove.clear()
+    # for s1 in reduced_space_subsets:
+      # for s2 in reduced_space_subsets:
+        # if s1 < s2:
+          # self.logger.debug(f'Removing subset {s1}')
+          # to_remove.add(frozenset(s1))
+    # for s in to_remove:
+      # reduced_space_subsets.remove(s)
+    # to_remove.clear()
+    # for s1 in reduced_space_subsets:
+      # for s2 in reduced_space_subsets:
+          # if (len(s1) > len(s2) or len(s1) > len(s3)) and not s1 <= s2 and not s1 <= s3 and s1 <= (s2 | s3):
+            # self.logger.debug(f'Removing set {s1}')
+            # to_remove.add(frozenset(s1))
+    # for s in to_remove:
+      # reduced_space_subsets.remove(s)
+    # to_remove = set()
+    # for s1 in reduced_space_subsets:
+      # for s2 in reduced_space_subsets:
+        # if s1 < s2:
+          # self.logger.debug(f'Removing subset {s1}')
+          # to_remove.add(frozenset(s1))
+    # for s in to_remove:
+      # reduced_space_subsets.remove(s)
     # space_subsets.sort(key=len)
     # space_subsets.reverse()
     # rows, columns, and diagonals
     num_rows = len(base_layout)
-    rows = [[(x, y) for x in range (0, len(base_layout[y])) if base_layout[y][x] in self.beacons] for y in range(0, num_rows)]
+    rows = [set([(x, y) for x in range (0, len(base_layout[y])) if base_layout[y][x] in self.beacons]) for y in range(0, num_rows)]
     num_columns = max([len(row) for row in rows])
-    columns = [[(x, y) for y in range(0, num_rows) if x < len(base_layout[y]) and base_layout[y][x] in self.beacons] for x in range (0, num_columns)]
+    columns = [set([(x, y) for y in range(0, num_rows) if x < len(base_layout[y]) and base_layout[y][x] in self.beacons]) for x in range (0, num_columns)]
     num_diagonals = max(num_columns, num_rows)
-    tlbr = [[(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := i + j) < len(base_layout[y]) and base_layout[y][x] in self.beacons] for j in range(1 - num_diagonals, num_diagonals)]
+    tlbr = [set([(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := i + j) < len(base_layout[y]) and base_layout[y][x] in self.beacons]) for j in range(1 - num_diagonals, num_diagonals)]
     tlbr = [i for i in tlbr if i]
-    bltr = [[(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := 2 * num_diagonals - 2 - i - j) < len(base_layout[y]) and base_layout[y][x] in self.beacons] for j in range(0, 2 * num_diagonals - 1)]
+    bltr = [set([(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := 2 * num_diagonals - 2 - i - j) < len(base_layout[y]) and base_layout[y][x] in self.beacons]) for j in range(0, 2 * num_diagonals - 1)]
     bltr = [i for i in bltr if i]
     # pick the subsets we're testing with
-    subsets = all_in_one
+    subsets = tlbr + rows + bltr + columns
     if self.args.verbosity >= 2:
       self.logger.debug(f'Starting layout value: {base_value}')
       self.logger.debug(f'Starting layout:\n{self._layout_to_string(base_layout)}')
