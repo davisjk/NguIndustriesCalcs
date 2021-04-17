@@ -116,24 +116,55 @@ class NguiBeaconOptimizer:
     base_layout = self._read_file(filename)
     base_value = self._layout_value(base_layout)
     spaces = sum([row.count(self.empty) for row in base_layout])
-    subsets = []
-    for y in range(0, len(base_layout)):
-      for x in range(0, len(base_layout[y])):
-        if base_layout[y][x] in self.beacons:
-          subsets.append(self._find_space_subset(base_layout, x, y))
-    # remove supersets of subsets to remove redundant calculations later
-    # removing the subsets instead introduces a logic bug
-    subsets_cp = subsets.copy()
-    for subset in subsets:
-      for other in subsets_cp:
-        if subset < other:
-          subsets_cp.remove(other)
-          # subsets_cp.remove(subset)
-          # break
-    subsets = subsets_cp
+    # seems checking subset order doesn't matter (I think), but subset overlap does (seems like both actually)
+    # TODO, try rows and/or columns? (columns would be faster for real maps) (need at least both in both orders)
+    # the whole layout in 1 set
+    all_in_one = [[(x, y) for y in range(0, len(base_layout)) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons]]
+    # subsets by affected space groups, order might matter, not sure how to sort
+    space_subsets = [[self._find_space_subset(base_layout, x, y) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons] for y in range(0, len(base_layout))]
+    # remove subsets/supersets strategically, order still might matter
+    reduced_space_subsets = space_subsets.copy()
+    to_remove = set()
+    for s1 in space_subsets:
+      for s2 in space_subsets:
+        if s1 < s2:
+          for s3 in space_subsets:
+            if s1 > s3:
+              to_remove.add(frozenset(s2))
+              to_remove.add(frozenset(s3))
+    for s in to_remove:
+      reduced_space_subsets.remove(s)
+    to_remove = set()
+    for s1 in reduced_space_subsets:
+      for s2 in reduced_space_subsets:
+        if s1 < s2:
+          to_remove.add(frozenset(s1))
+    for s in to_remove:
+      reduced_space_subsets.remove(s)
+    # space_subsets.sort(key=len)
+    # space_subsets.reverse()
+    # rows, columns, and diagonals
+    num_rows = len(base_layout)
+    rows = [[(x, y) for x in range (0, len(base_layout[y])) if base_layout[y][x] in self.beacons] for y in range(0, num_rows)]
+    num_columns = max([len(row) for row in rows])
+    columns = [[(x, y) for y in range(0, num_rows) if x < len(base_layout[y]) and base_layout[y][x] in self.beacons] for x in range (0, num_columns)]
+    num_diagonals = max(num_columns, num_rows)
+    tlbr = [[(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := i + j) < len(base_layout[y]) and base_layout[y][x] in self.beacons] for j in range(1 - num_diagonals, num_diagonals)]
+    tlbr = [i for i in tlbr if i]
+    bltr = [[(x, y) for i in range(0, num_diagonals) if 0 <= (y := i) < num_rows and 0 <= (x := 2 * num_diagonals - 2 - i - j) < len(base_layout[y]) and base_layout[y][x] in self.beacons] for j in range(0, 2 * num_diagonals - 1)]
+    bltr = [i for i in bltr if i]
+    # pick the subsets we're testing with
+    subsets = all_in_one
     if self.args.verbosity >= 2:
       self.logger.debug(f'Starting layout value: {base_value}')
       self.logger.debug(f'Starting layout:\n{self._layout_to_string(base_layout)}')
+      self.logger.debug(f'{len(all_in_one)} all_in_one: {all_in_one}')
+      self.logger.debug(f'{len(space_subsets)} space_subsets: {space_subsets}')
+      self.logger.debug(f'{len(reduced_space_subsets)} reduced_space_subsets: {reduced_space_subsets}')
+      self.logger.debug(f'{len(rows)} rows: {rows}')
+      self.logger.debug(f'{len(columns)} columns: {columns}')
+      self.logger.debug(f'{len(tlbr)} tlbr: {tlbr}')
+      self.logger.debug(f'{len(bltr)} bltr: {bltr}')
       self.logger.debug(f'{len(subsets)} subsets: {subsets}')
     permutations = 0
     best_layout = base_layout
@@ -170,8 +201,7 @@ class NguiBeaconOptimizer:
           ]
           self._write_file(output_filename, best_layout, extra_contents)
       elif value == best_value:
-        if self.args.verbosity >= 1:
-          self.logger.debug(f'Found best layout after {permutations} permutations')
+        self.logger.debug(f'Found best layout after {permutations} permutations')
         if self.args.o:
           extra_contents = [
             f'Effective production: {best_value}',
@@ -200,9 +230,14 @@ class NguiBeaconOptimizer:
     best_layout, best_value, subpermutations = self._recurse_sublayout(layout, subset.copy(), deepcopy(layout), value, 0)
     if self.args.verbosity >= 2:
       self.logger.debug(f'Found best sublayout after {subpermutations} subpermutations: {best_value}')
+    if self.args.verbosity >= 3:
+      self.logger.debug('\n' + self._layout_to_string(best_layout))
     return best_layout, best_value
 
   def _recurse_sublayout(self, layout, subset, best_layout, best_value, subpermutations):
+    # TODO: test if this order matters
+    # discrepency found in 3x5, 3x6, 4x4, 4x5, 4x6... -bpx (not present in -bpxk ?)
+    # 5x6 -bpxk < 5x6 -bpx? (not sure if -bpx is optimal)
     if subset:
       space = subset.pop()
       counterproductive = self._counterproductive_beacon(layout, *space)

@@ -1,0 +1,59 @@
+# All Subsets
+only do this with knights
+split into subsets of every space that could be affected by a given space for each space
+this might go faster if this was split up into two subsets, one for boxes and one for knights
+pros:
+seems to work for most boxes + knights
+cons:
+didn't work for 5x6, needs investigation
+order that sets are checked in matters
+
+# Middle/Big Subsets
+only do this for boxes only
+start with all subsets
+remove supersets and subsets of sets that are both subsets and supersets
+then remove any remaining subsets of supersets
+pros:
+seems to fix "all subsets" bug with -bpx for at least 3x5
+cons:
+needs more testing with other layouts that weren't working for "all subsets"
+order that sets are checked in might still matter
+
+# Lines
+check rows then columns then diagonals
+check columns then rows then diagonals
+check diagonals then rows then columns
+check diagonals then columns then rows
+check rows then diagonals then columns
+check columns then diagonals then rows
+keep best of all those
+iterate on best and check all combos again until we get the same best twice in a row
+pros:
+seems to be able to get best for boxes
+cons:
+doesn't do knights well
+not sure if best is guaranteed for boxes
+order of checks matters so we have to check every order
+
+# Spiral
+for every space on the board
+find best beacon there
+find best beacon for adjacent spaces one at a time
+iterate on best and repeat until we get the same best twice in a row
+pros:
+very fast to check one space at a time
+cons:
+completely untested
+order/direction of spiral probably matters
+
+# Random
+for every space on the board in a random order
+find the best beacon there
+keep track of best
+repeat forever?
+pros:
+very fast to check one space at a time
+cons:
+completely untested
+how many iterations til we can be confident in the result or just call it done?
+wait how is this different from checking every space at once then?!
