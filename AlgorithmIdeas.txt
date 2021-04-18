@@ -1,4 +1,9 @@
-# All Subsets
+# Observations
+When checking by square subsets, starting from the center is usually better.
+Checking by rows + columns + diagonals can yield the best possible layout, but the order lines have to be checked in is not consistent between layouts.
+
+# Ideas
+## All Subsets :/ (better if starting in the center)
 only do this with knights
 split into subsets of every space that could be affected by a given space for each space
 this might go faster if this was split up into two subsets, one for boxes and one for knights
@@ -8,7 +13,7 @@ cons:
 didn't work for 5x6, needs investigation
 order that sets are checked in matters
 
-# Middle/Big Subsets
+## Middle/Big Subsets :(
 only do this for boxes only
 start with all subsets
 remove supersets and subsets of sets that are both subsets and supersets
@@ -18,19 +23,22 @@ seems to fix "all subsets" bug with -bpx for at least 3x5
 cons:
 needs more testing with other layouts that weren't working for "all subsets"
 order that sets are checked in might still matter
+breaks sometimes when all subsets doesn't
 
-# Lines
+## Lines :(
 check every order of rows, columns, tlbr, bltr
 keep best of all those
 iterate on best and check all combos again until we get the same best twice in a row
 pros:
-seems to be able to get best for boxes
+both combos of rows/columns seems to be able to get best for boxes (only on grids)
+very fast
 cons:
 doesn't do knights well
-not sure if best is guaranteed for boxes
+best is not guaranteed for boxes
+only works well for NxM grids not pluses
 order of checks matters so we have to check every order
 
-# Spiral
+## Spiral
 for every space on the board
 find best beacon there
 find best beacon for adjacent spaces one at a time
@@ -41,7 +49,14 @@ cons:
 completely untested
 order/direction of spiral probably matters
 
-# Random
+## Small Groups
+do overlapping 2x2 squares in spiral from center
+pros:
+fast
+con:
+might not be best every time
+
+## Random :(((
 for every space on the board in a random order
 find the best beacon there
 keep track of best
