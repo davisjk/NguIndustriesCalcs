@@ -1,10 +1,11 @@
 # Observations
 When checking by square subsets, starting from the center is usually better.
 Checking by rows + columns + diagonals can yield the best possible layout, but the order lines have to be checked in is not consistent between layouts.
+Might need to keep track of layouts that match the best/current best and iterate on all of those.
 
 # Ideas
-## All Subsets :/ (better if starting in the center)
-only do this with knights
+## All Subsets :/ (better if starting in the center, but still not perfect) (probably best so far)
+-only do this with knights-
 split into subsets of every space that could be affected by a given space for each space
 this might go faster if this was split up into two subsets, one for boxes and one for knights
 pros:
@@ -54,7 +55,7 @@ do overlapping 2x2 squares in spiral from center
 pros:
 fast
 con:
-might not be best every time
+might not be best hardly ever
 
 ## Random :(((
 for every space on the board in a random order

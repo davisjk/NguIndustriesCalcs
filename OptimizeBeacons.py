@@ -138,6 +138,7 @@ class NguiBeaconOptimizer:
     # subsets by affected space groups, order might matter, not sure how to sort
     self.center = ((num_columns - 1) / 2, (num_rows - 1) / 2)
     all_space_subsets = [self._find_space_subset(base_layout, x, y) for y in range(0, len(base_layout)) for x in range(0, len(base_layout[y])) if base_layout[y][x] in self.beacons]
+    all_space_subsets.sort(key=len)
     all_space_subsets.sort(key=self._sort_subsets)
     all_space_subsets = [set(subset) for subset in all_space_subsets]
     space_subsets = all_space_subsets.copy()
